@@ -8,5 +8,5 @@ setup(name='Bot Farm',
       author='Gianpiero Sportelli',
       author_email='sportelligianpiero@gmail.com',
       # url='https://www.python.org/sigs/distutils-sig/',
-      packages=['bot_farm'],
+      packages=['bot_farm','bert'],
      )

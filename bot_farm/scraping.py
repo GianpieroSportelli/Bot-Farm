@@ -53,11 +53,20 @@ class Telegram_Scraper(AbstractScraper):
         page = requests.get(self.url)
         print(page.text)
         soup = BeautifulSoup(page.content, 'html.parser')
-        job_elems = soup.find_all('hr')
+        job_elems = soup.find_all('h4')
         result = []
         i = 0
-        for job_elem in job_elems:
-            print(job_elem)
+        start_question=False
+        for job_elem in soup:
+            if type(job_elem) == Tag:
+                if job_elem.name == "h3":
+                    print("START section {}".format(job_elem.text))
+                    start_question=True
+                if job_elem.name == "h4":
+                    print("     START question {}".format(job_elem.text))
+                if job_elem.name == "p" and start_question:
+                    print("         START answer {}".format(job_elem.text))
+
             # i += 1
             # for child in job_elem.find_all("dt"):
             #     tags = child.find_all("strong")
@@ -71,9 +80,9 @@ class Telegram_Scraper(AbstractScraper):
         # return pd.DataFrame(result)
 
 if __name__ == "__main__":
-    # main_page = "http://www.salute.gov.it/portale/nuovocoronavirus/dettaglioFaqNuovoCoronavirus.jsp?lingua=italiano&id=228#11"
-    # dataset=COVID_Scraper(main_page).createDataset()
-    # dataset.to_csv("dataset.csv")
+    main_page = "http://www.salute.gov.it/portale/nuovocoronavirus/dettaglioFaqNuovoCoronavirus.jsp?lingua=italiano&id=228#11"
+    dataset=COVID_Scraper(main_page).createDataset()
+    dataset.to_csv("dataset.csv")
     base_url="https://telegram.org/faq/it"
     Telegram_Scraper(base_url).createDataset()
 

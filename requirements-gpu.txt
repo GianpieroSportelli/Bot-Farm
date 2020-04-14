@@ -1,0 +1,12 @@
+requests
+beautifulsoup4
+# tensorflow==2.2.0rc2
+pandas==1.0.1
+nlpaug
+matplotlib
+nltk
+tensorflow_hub>=0.7
+tensorflow_text>=2.0.0rc0
+scikit_learn
+telepot
+datetime

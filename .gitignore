@@ -1,3 +1,5 @@
 .idea/
+bert/
+addons/
 *.pyc
 

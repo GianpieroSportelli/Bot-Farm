@@ -6,7 +6,6 @@ nlpaug
 matplotlib
 nltk
 tensorflow_hub>=0.7
-tensorflow_text>=2.0.0rc0
-scikit_learn
 telepot
 datetime
+tensorflow_model_optimization

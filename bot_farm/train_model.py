@@ -2,23 +2,15 @@ import tensorflow as tf
 import pandas as pd
 from bot_farm.model import create_model
 from bot_farm.label_util import save_labels, encode
-from bot_farm.model import get_bert_layer
-from bert.tokenization import FullTokenizer
+import tensorflow_model_optimization as tfmot
 import logging
+import os
 
 logger =tf.get_logger()
 logger.setLevel(logging.INFO)
 logger.propagate=False
 
-global tokenizer
-
-bert_layer = get_bert_layer(fine_tune=False)
-vocab_file = bert_layer.resolved_object.vocab_file.asset_path.numpy()
-do_lower_case = bert_layer.resolved_object.do_lower_case.numpy()
-tokenizer = FullTokenizer(vocab_file, do_lower_case)
-
-
-def create_bert_features(texts, max_seq_length):
+def create_bert_features(tokenizer,texts, max_seq_length):
     input_ids = []
     input_mask = []
     segment_ids = []
@@ -48,8 +40,9 @@ def create_bert_features(texts, max_seq_length):
     return input_ids, input_mask, segment_ids
 
 
-def run(train: pd.DataFrame, dev: pd.DataFrame, label_path=None, model_path=None, epochs=5, batch_size=16,
+def run(train: pd.DataFrame, dev: pd.DataFrame, label_path=None, model_path="model", epochs=5, batch_size=16,
         max_seq_length=64):
+    from bot_farm.custom_layer import tokenizer
     data = train.append(dev)
 
     labels = list(set(data.label))
@@ -60,11 +53,11 @@ def run(train: pd.DataFrame, dev: pd.DataFrame, label_path=None, model_path=None
 
     y_train = list(train['label'])
     x_train = list(train['text'])
-    train_input_ids, train_input_mask, train_segment_ids = create_bert_features(x_train, max_seq_length)
+    train_input_ids, train_input_mask, train_segment_ids = create_bert_features(tokenizer,x_train, max_seq_length)
 
     y_dev = list(dev['label'])
     x_dev = list(dev['text'])
-    dev_input_ids, dev_input_mask, dev_segment_ids = create_bert_features(x_dev, max_seq_length)
+    dev_input_ids, dev_input_mask, dev_segment_ids = create_bert_features(tokenizer,x_dev, max_seq_length)
 
     y_train = encode(y_train, labels)
     y_dev = encode(y_dev, labels)
@@ -77,13 +70,34 @@ def run(train: pd.DataFrame, dev: pd.DataFrame, label_path=None, model_path=None
                   tf.constant(dev_input_mask, shape=[len(x_dev), max_seq_length], dtype=tf.float32),
                   tf.constant(dev_segment_ids, shape=[len(x_dev), max_seq_length], dtype=tf.float32))
 
-    model = create_model(labels, epochs, fine_tune=True, is_training=True)
+    train_steps = (len(x_train)//batch_size)*epochs
+    logger.info("Training Steps {}".format(train_steps))
+    model = create_model(labels,train_steps, epochs, fine_tune=True, is_training=True)
 
-    history = model.fit(train_data, y_train, epochs=epochs, batch_size=batch_size, validation_data=(dev_data, y_dev))
-    if not model_path:
-        model.save("model")
-    else:
-        model.save(model_path)
+    model.summary()
+
+    history = model.fit(train_data, y_train, epochs=epochs, batch_size=batch_size, validation_data=(dev_data, y_dev),callbacks=[tfmot.sparsity.keras.UpdatePruningStep(),tfmot.sparsity.keras.PruningSummaries("logdir")])
+    final_model = tfmot.sparsity.keras.strip_pruning(model)
+    final_model.summary()
+    final_model.save(model_path,include_optimizer=False,save_format='tf')
+
+    # ##https://www.tensorflow.org/lite/guide/ops_select
+    # converter = tf.lite.TFLiteConverter.from_saved_model(model_path)
+    # converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
+    #                                        tf.lite.OpsSet.SELECT_TF_OPS]
+    # tflite_model = converter.convert()
+    # open(os.path.join(model_path,"model.tflite"), "wb").write(tflite_model)
+
+    # https://www.dlology.com/blog/how-to-compress-your-keras-model-x5-smaller-with-tensorflow-model-optimization/
+    # pruning_schedule = tfmot.sparsity.keras.PolynomialDecay(
+    #     initial_sparsity=0.0, final_sparsity=0.6,
+    #     begin_step=0, end_step=4000)
+    #
+    # model_for_pruning = tfmot.sparsity.keras.prune_low_magnitude(model, pruning_schedule=pruning_schedule)
+    #
+    # model_for_pruning.fit(train_data, y_train, epochs=epochs, batch_size=batch_size, validation_data=(dev_data, y_dev))
+    #
+    # model_for_pruning.save(model_path,include_optimizer=False)
 
 
 if __name__ == "__main__":
@@ -91,6 +105,6 @@ if __name__ == "__main__":
     train = train.sample(frac=1.0)
     dev = pd.read_csv('dev.csv')
 
-    epochs = 5
-    batch_size = 32
-    run(train, dev)
+    epochs = 3
+    batch_size = 16
+    run(train, dev,batch_size=batch_size,epochs=epochs)

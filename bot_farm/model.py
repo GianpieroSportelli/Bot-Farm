@@ -1,35 +1,101 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Dropout, Dense
 from tensorflow.keras.models import Model
-from tensorflow.keras.optimizers import Adam
 from bot_farm.custom_layer import Bert
 import tensorflow_model_optimization as tfmot
+import matplotlib.pyplot as plt
 
 
-def create_model(labels,train_steps,epochs=1,init_learning_rate=2e-5,dropout=0.1,max_seq_length = 64,fine_tune=True,is_training=True):
-    quantize_annotate_layer = tfmot.quantization.keras.quantize_annotate_layer
+# ##https://www.tensorflow.org/lite/guide/ops_select
+# converter = tf.lite.TFLiteConverter.from_saved_model(model_path)
+# converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
+#                                        tf.lite.OpsSet.SELECT_TF_OPS]
+# tflite_model = converter.convert()
+# open(os.path.join(model_path,"model.tflite"), "wb").write(tflite_model)
 
+# https://www.dlology.com/blog/how-to-compress-your-keras-model-x5-smaller-with-tensorflow-model-optimization/
+# pruning_schedule = tfmot.sparsity.keras.PolynomialDecay(
+#     initial_sparsity=0.0, final_sparsity=0.6,
+#     begin_step=0, end_step=4000)
+#
+# model_for_pruning = tfmot.sparsity.keras.prune_low_magnitude(model, pruning_schedule=pruning_schedule)
+#
+# model_for_pruning.fit(train_data, y_train, epochs=epochs, batch_size=batch_size, validation_data=(dev_data, y_dev))
+#
+# model_for_pruning.save(model_path,include_optimizer=False)
+
+
+def build_and_train_model(labels, train_steps, train_data, y_train, dev_data, y_dev, batch_size=32, epochs=1,
+                          init_learning_rate=2e-5, dropout=0.1, max_seq_length=64, fine_tune=True, is_training=True):
     input_word_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype=tf.int32,
                                            name="input_word_ids")
     input_mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype=tf.int32,
                                        name="input_mask")
     segment_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype=tf.int32,
                                         name="segment_ids")
+
     output = Bert(fine_tuning=fine_tune)([input_word_ids, input_mask, segment_ids])
-    output=Dropout(dropout if is_training else 0.0)(output)
-    logit=Dense(len(labels), activation='softmax')(output)
-    model = Model(inputs=[input_word_ids,input_mask,segment_ids], outputs=logit)
+    output = Dropout(dropout if is_training else 0.0)(output)
+    logit = Dense(len(labels), activation='softmax')(output)
+
+    model = Model(inputs=[input_word_ids, input_mask, segment_ids], outputs=logit)
     # pruning_schedule = tfmot.sparsity.keras.ConstantSparsity(target_sparsity=0.4,begin_step=0,frequency=10)
-    pruning_schedule = tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=0.0,final_sparsity=0.1,begin_step=0,end_step=train_steps,frequency=int(train_steps/epochs))
+
+    pruning_schedule = tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=0.0, final_sparsity=0.1, begin_step=0,
+                                                            end_step=train_steps, frequency=int(train_steps / epochs))
     model_for_pruning = tfmot.sparsity.keras.prune_low_magnitude(model, pruning_schedule=pruning_schedule)
-    opt = Adam(learning_rate=init_learning_rate,decay=init_learning_rate/epochs)
-    model_for_pruning.compile(loss='categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
 
-    return model_for_pruning
+    learning_rate = CustomSchedule(init_lr=init_learning_rate, train_steps=train_steps,
+                                   warmup_steps=int(train_steps * 0.10))
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.999,
+                                         epsilon=1e-6, decay=0.01)
+
+    model_for_pruning.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+    model_for_pruning.summary()
+    history = model_for_pruning.fit(train_data, y_train, epochs=epochs, batch_size=batch_size,
+                                    validation_data=(dev_data, y_dev),
+                                    callbacks=[tfmot.sparsity.keras.UpdatePruningStep(),
+                                               tfmot.sparsity.keras.PruningSummaries("logdir")])
+    final_model = tfmot.sparsity.keras.strip_pruning(model)
+    final_model.summary()
+    return final_model
 
 
+# conversion of scheduler tf1 https://github.com/google-research/bert/blob/master/optimization.py
+class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, init_lr, train_steps=1000, warmup_steps=None):
+        super(CustomSchedule, self).__init__()
+        self.init_lr = init_lr
+        self.train_step = train_steps
+        self.warmup_steps = warmup_steps
 
+    def __call__(self, step):
+        # learning_rate=self.init_lr*((self.train_step-step)/self.train_step)
+        learning_rate = tf.keras.optimizers.schedules.PolynomialDecay(
+            self.init_lr, self.train_step, end_learning_rate=0.0, power=1.0,
+            cycle=False)(step)
 
+        if self.warmup_steps:
+            global_steps_int = tf.cast(step, tf.int32)
+            warmup_steps_int = tf.constant(self.warmup_steps, dtype=tf.int32)
 
+            global_steps_float = tf.cast(global_steps_int, tf.float32)
+            warmup_steps_float = tf.cast(warmup_steps_int, tf.float32)
 
+            warmup_percent_done = global_steps_float / warmup_steps_float
+            warmup_learning_rate = self.init_lr * warmup_percent_done
 
+            is_warmup = tf.cast(global_steps_int < warmup_steps_int, tf.float32)
+            learning_rate = (
+                    (1.0 - is_warmup) * learning_rate + is_warmup * warmup_learning_rate)
+
+        # print("Learning Rate {} at step {}".format(learning_rate, step))
+        return learning_rate
+
+if __name__=="__main__":
+    scheduler=CustomSchedule(init_lr=0.1,train_steps=100,warmup_steps=10)
+    plt.plot(scheduler(tf.range(100, dtype=tf.float32)))
+    plt.ylabel("Learning Rate")
+    plt.xlabel("Train Step")
+    plt.show()

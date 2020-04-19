@@ -1,10 +1,10 @@
 FROM tensorflow/tensorflow:2.2.0rc2-gpu-py3
 LABEL maintainer="Gianpiero Sportelli <sportelligianpiero@gmil.com>"
 
-COPY ./requirements-gpu.txt /srv/src/
-RUN pip3 install --no-cache-dir -r /srv/src/requirements-gpu.txt
 COPY ./ /srv/src/
 RUN pip3 install /srv/src
+RUN rm /srv/src
+RUN pip3 install tensorflow-gpu>=2.0
 
 ENTRYPOINT ["python3", "-m", "bot_farm.bot"]
 CMD []

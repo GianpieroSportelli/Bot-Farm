@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 from bot_farm.label_util import load_labels, decode
 from bot_farm.train_model import create_bert_features
-from bert.tokenization import FullTokenizer
+from bot_farm.bert.tokenization import FullTokenizer
 
 
 class model_predictor:

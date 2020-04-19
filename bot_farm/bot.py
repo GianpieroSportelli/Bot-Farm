@@ -1,27 +1,32 @@
 from bot_farm.predictor import model_predictor
 from bot_farm.data_aug import train_eval_dataset
 from bot_farm.train_model import run
+from telepot.delegate import pave_event_space, per_chat_id, create_open
+from telepot.loop import MessageLoop
 
+import pandas as pd
+
+import random
 import sys
 import time
 import logging
 import telepot
 import os
-import pandas as pd
-from telepot.delegate import pave_event_space, per_chat_id, create_open
-from telepot.loop import MessageLoop
 import argparse
+
 global predictor,answers,dataset
 
 
 parser = argparse.ArgumentParser(description='Bot farm')
 parser.add_argument('--token', help='telegram token', required=True)
 parser.add_argument('--dataset', help='dataset file path', required=True)
+parser.add_argument('--answer', help='answer file path', required=True)
 parser.add_argument("--base_dir",help="base directory",default="./")
-parser.add_argument("--default_answer",help="the bot default answer",default="mi dispiace, non ho capito.")
+parser.add_argument("--default_answer",help="the bot default answer",default="NO_ANSWER")
 parser.add_argument("--welcome_message",help="the bot welcome message",default="Benvenuto, fammi una domanda.")
 parser.add_argument("--threshold",help="the bot threshold",type=float,default=0.5)
 parser.add_argument("--epochs",help="the bot epochs in training",type=int,default=5)
+parser.add_argument("--language",help="the bot language",type=str,default="ita")
 bot_args = parser.parse_args()
 
 logs_file=os.path.join(bot_args.base_dir,"bot.log")
@@ -51,20 +56,37 @@ class Bot(telepot.helper.ChatHandler):
             if '/start' in command:
                 self.sender.sendMessage(bot_args.welcome_message)
             else:
-                self.sender.sendMessage(self.getAnswer(command,th=bot_args.threshold))
+                response = self.getAnswer(command,th=bot_args.threshold)
+                if "text" in response:
+                    alternatives=response["text"]
+                    text=random.choice(alternatives)
+                    tokens =text.split(" ")
+                    text_message=[]
+                    for t in tokens:
+                        tentative=list(text_message)
+                        tentative.append(t)
+                        tentative_message=" ".join(tentative)
+                        if len(tentative_message)>4096:
+                            self.sender.sendMessage(" ".join(text_message))
+                            text_message=[t]
+                        else:
+                            text_message=tentative
+                    if len(text_message):
+                        self.sender.sendMessage(" ".join(text_message))
+                elif "photo" in response:
+                    alternatives = response["photo"]
+                    photo_url= random.choice(alternatives)
+                    self.sender.sendPhoto(photo_url)
 
     def getAnswer(self,text, th=0.3):
         global predictor, answers
         label, conf = predictor.predict(text)
         logging.info("for question: {} prediction {} with confidence {}".format(text, label, conf))
         if conf > th:
-            response=answers[label][0].strip()
-            if len(response)>500:
-                return response[:500]+"..."
-            else:
-                return response
+            response=answers[label]
+            return response
         else:
-            return bot_args.default_answer
+            return {"text":[bot_args.default_answer]} if not "NO_ANSWER" == bot_args.default_answer else {}
 
 
 def setup():
@@ -72,18 +94,19 @@ def setup():
     model_path=os.path.join(bot_args.base_dir,"model")
     label_path=os.path.join(bot_args.base_dir,"labels.pkl")
     dataset = pd.read_csv(bot_args.dataset)
+    answer = pd.read_csv(bot_args.answer)
     if not os.path.exists(model_path):
-        train,dev = train_eval_dataset(dataset)
+        train,dev = train_eval_dataset(dataset,lang=bot_args.language)
         run(train,dev,label_path=label_path,model_path=model_path,epochs=bot_args.epochs)
 
     predictor=model_predictor(label_path=label_path,model_path=model_path)
-    answers={row["question_id"]:list({row["answer"] for _,row2 in dataset.iterrows() if row2["question_id"]==row["question_id"]}) for _,row in dataset.iterrows()}
+    answers={row["question_id"]:{row["type"]:row["answer"].split("[SEP]") for _,row2 in answer.iterrows() if row2["question_id"]==row["question_id"]} for _,row in answer.iterrows()}
     return 0
 
 setup()
 
 token = bot_args.token
-bot = telepot.DelegatorBot(token, [pave_event_space()(per_chat_id(), create_open, Bot, timeout=10),
+bot = telepot.DelegatorBot(token, [pave_event_space()(per_chat_id(), create_open, Bot, timeout=360),
 ])
 
 MessageLoop(

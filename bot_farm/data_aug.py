@@ -11,8 +11,8 @@ nltk.download('wordnet')
 nltk.download('omw')
 
 
-def train_eval_dataset(dataset: pd.DataFrame):
-    flow = naf.Sometimes([naw.SynonymAug(lang="ita", aug_min=10),naw.RandomWordAug("swap"),naw.RandomWordAug("delete"),nac.OcrAug()])
+def train_eval_dataset(dataset: pd.DataFrame,lang="ita"):
+    flow = naf.Sometimes([naw.SynonymAug(lang=lang, aug_min=10),naw.RandomWordAug("swap"),naw.RandomWordAug("delete"),nac.OcrAug()])
 
     train_afert_exp=[]
     dev_after_exp=[]

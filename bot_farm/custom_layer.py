@@ -1,6 +1,6 @@
 import tensorflow as tf
 import tensorflow_hub as hub
-from bert.tokenization import FullTokenizer
+from bot_farm.bert.tokenization import FullTokenizer
 from tensorflow.keras.layers import Layer
 from tensorflow_model_optimization.python.core.sparsity.keras.prunable_layer import PrunableLayer
 

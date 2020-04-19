@@ -27,6 +27,7 @@ parser.add_argument("--welcome_message",help="the bot welcome message",default="
 parser.add_argument("--threshold",help="the bot threshold",type=float,default=0.5)
 parser.add_argument("--epochs",help="the bot epochs in training",type=int,default=5)
 parser.add_argument("--language",help="the bot language",type=str,default="ita")
+parser.add_argument("--expansion",help="the bot data aug expansion",type=int,default=5)
 bot_args = parser.parse_args()
 
 logs_file=os.path.join(bot_args.base_dir,"bot.log")
@@ -96,7 +97,7 @@ def setup():
     dataset = pd.read_csv(bot_args.dataset)
     answer = pd.read_csv(bot_args.answer)
     if not os.path.exists(model_path):
-        train,dev = train_eval_dataset(dataset,lang=bot_args.language)
+        train,dev = train_eval_dataset(dataset,lang=bot_args.language,expansion=bot_args.expansion)
         run(train,dev,label_path=label_path,model_path=model_path,epochs=bot_args.epochs)
 
     predictor=model_predictor(label_path=label_path,model_path=model_path)

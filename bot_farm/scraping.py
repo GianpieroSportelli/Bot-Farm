@@ -78,11 +78,43 @@ class Telegram_Scraper(AbstractScraper):
             #         {"question_id": "{}.{}".format(i, id_question), "question": question, "answer": answer_text})
 
         # return pd.DataFrame(result)
+class Film_Scraper(AbstractScraper):
+    def __init__(self):
+        super().__init__(url="https://www.cineblog.it/post/36923/citazioni-cinematografiche-quale-vi-tatuereste")
+
+    def createDataset(self):
+        page = requests.get(self.url)
+        result=[]
+        # print(page.text)
+        soup = BeautifulSoup(page.content, 'html.parser')
+        job_elems = soup.find_all('p')
+
+        for elem in job_elems:
+            text = elem.text
+            try:
+                num=int(text[0])
+                for sub_elem in text.split("\n"):
+                    i=0
+                    while not sub_elem[i]==".":
+                        i+=1
+
+                    good=sub_elem[i+1:]
+                    good=good.strip()
+                    assert len(good.split("-"))==2
+                    splitted=good.split("-")
+                    example=splitted[0].strip()
+                    film=splitted[1].strip()
+                    result.append({"question":example,"question_id":film})
+            except:
+                continue
+
+        return pd.DataFrame(result)
 
 if __name__ == "__main__":
-    main_page = "http://www.salute.gov.it/portale/nuovocoronavirus/dettaglioFaqNuovoCoronavirus.jsp?lingua=italiano&id=228#11"
-    dataset=COVID_Scraper(main_page).createDataset()
-    dataset.to_csv("dataset.csv")
-    base_url="https://telegram.org/faq/it"
-    Telegram_Scraper(base_url).createDataset()
-
+    dataset=Film_Scraper().createDataset()
+    dataset.to_csv("/home/gianpiero/data/film_bot/new_dataset.csv",index=False)
+    answer=dataset[["question_id"]]
+    answer=answer.drop_duplicates()
+    answer["type"]=answer.question_id.apply(lambda x: "photo")
+    answer["answer"] = answer.question_id.apply(lambda x: "LINK")
+    answer.to_csv("/home/gianpiero/data/film_bot/new_answer.csv", index=False)

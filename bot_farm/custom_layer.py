@@ -11,7 +11,7 @@ bert_layer=hub.KerasLayer(hub_module,trainable=fine_tune)
 vocab_file = bert_layer.resolved_object.vocab_file.asset_path.numpy()
 do_lower_case = bert_layer.resolved_object.do_lower_case.numpy()
 
-tokenizer = FullTokenizer(vocab_file, do_lower_case)
+tokenizer = FullTokenizer(vocab_file, True)
 del bert_layer,vocab_file,do_lower_case
 
 class Bert(PrunableLayer,Layer):

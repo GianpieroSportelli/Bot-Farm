@@ -9,7 +9,7 @@ class model_predictor:
     def __init__(self, label_path: str = "labels.pkl", model_path: str = "model"):
         self.labels = load_labels(label_path)
         self.model = tf.saved_model.load(model_path)
-        self.tokenizer= FullTokenizer(os.path.join(model_path,"assets/vocab.txt"),False)
+        self.tokenizer= FullTokenizer(os.path.join(model_path,"assets/vocab.txt"),True)
 
     def predict(self, text: str,max_seq_length=64):
         input_ids,input_mask,segment_ids=create_bert_features(self.tokenizer,[text],max_seq_length=max_seq_length)

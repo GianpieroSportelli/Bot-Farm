@@ -1,0 +1,17 @@
+FROM python:3.7
+LABEL maintainer="Gianpiero Sportelli <sportelligianpiero@gmil.com>"
+
+RUN apt-get update && apt-get install -y libblas3 libatlas-base-dev liblapack-dev
+RUN echo "[global]\nextra-index-url=https://www.piwheels.org/simple" >> /etc/pip.conf
+RUN cat /etc/pip.conf
+COPY ./ /srv/src/
+RUN pip3 install /srv/src/addons/numpy-1.18.2-cp37-cp37m-linux_armv7l.whl
+RUN pip3 install /srv/src/addons/scipy-1.4.1-cp37-cp37m-linux_armv7l.whl
+RUN pip3 install /srv/src/addons/tensorflow-2.1.0-cp37-cp37m-linux_armv7l.whl
+RUN pip3 install /srv/src/addons/dm_tree-0.1.4-cp37-cp37m-linux_armv7l.whl
+RUN pip3 install /srv/src
+RUN rm -r /srv/src
+RUN rm -r .cache
+
+ENTRYPOINT ["python3", "-m", "bot_farm.bot"]
+CMD []

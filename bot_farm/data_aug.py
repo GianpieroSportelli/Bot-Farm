@@ -11,7 +11,7 @@ nltk.download('wordnet')
 nltk.download('omw')
 
 
-def train_eval_dataset(dataset: pd.DataFrame,lang="ita"):
+def train_eval_dataset(dataset: pd.DataFrame,lang="ita",expansion=10):
     flow = naf.Sometimes([naw.SynonymAug(lang=lang, aug_min=10),naw.RandomWordAug("swap"),naw.RandomWordAug("delete"),nac.OcrAug()])
 
     train_afert_exp=[]
@@ -19,7 +19,7 @@ def train_eval_dataset(dataset: pd.DataFrame,lang="ita"):
 
     for idx, row in dataset.iterrows():
         logging.info("[{}/{}] {}".format(idx, len(dataset), row["question"]))
-        new_text = [new for new in flow.augment(row["question"], n=20)]
+        new_text = [new for new in flow.augment(row["question"], n=expansion)]
         train_afert_exp.append({"label": row["question_id"], "text": row["question"]})
         th=int(len(new_text)*0.8)
         for text in new_text[:th]:
@@ -30,8 +30,8 @@ def train_eval_dataset(dataset: pd.DataFrame,lang="ita"):
     train=train_afert_exp
     dev=dev_after_exp
 
-    train = pd.DataFrame(train)
-    dev = pd.DataFrame(dev)
+    train = pd.DataFrame(train).sample(frac=1.0)
+    dev = pd.DataFrame(dev).sample(frac=1.0)
 
     return train, dev
 

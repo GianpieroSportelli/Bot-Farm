@@ -6,12 +6,10 @@ import nltk
 import pandas as pd
 import logging
 
-nltk.download('averaged_perceptron_tagger')
-nltk.download('wordnet')
-nltk.download('omw')
-
-
 def train_eval_dataset(dataset: pd.DataFrame,lang="ita",expansion=10):
+    nltk.download('averaged_perceptron_tagger')
+    nltk.download('wordnet')
+    nltk.download('omw')
     flow = naf.Sometimes([naw.SynonymAug(lang=lang, aug_min=10),naw.RandomWordAug("swap"),naw.RandomWordAug("delete"),nac.KeyboardAug()])
 
     train_afert_exp=[]

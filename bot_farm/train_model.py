@@ -2,6 +2,7 @@ import tensorflow as tf
 import pandas as pd
 from bot_farm.model import build_and_train_model
 from bot_farm.label_util import save_labels, encode
+from bot_farm.custom_layer import get_tokenier
 import logging
 
 logger = tf.get_logger()
@@ -39,9 +40,8 @@ def create_bert_features(tokenizer, texts, max_seq_length):
     return input_ids, input_mask, segment_ids
 
 
-def run(train: pd.DataFrame, dev: pd.DataFrame, label_path=None, model_path="model", epochs=5, batch_size=16,
-        max_seq_length=64):
-    from bot_farm.custom_layer import tokenizer
+def run(train: pd.DataFrame, dev: pd.DataFrame, label_path=None, model_path="model", epochs=5, batch_size=16,max_seq_length=64,compress=True):
+    tokenizer=get_tokenier()
     data = train.append(dev)
 
     labels = list(set(data.label))
@@ -73,7 +73,7 @@ def run(train: pd.DataFrame, dev: pd.DataFrame, label_path=None, model_path="mod
     logger.info("Training Steps {}".format(train_steps))
     model = build_and_train_model(labels=labels, train_steps=train_steps, train_data=train_data, y_train=y_train,
                                   dev_data=dev_data, y_dev=y_dev, batch_size=batch_size, epochs=epochs, fine_tune=True,
-                                  is_training=True)
+                                  is_training=True,max_seq_length=max_seq_length,compress=compress)
     model.save(model_path, include_optimizer=False, save_format='tf')
 
 if __name__ == "__main__":

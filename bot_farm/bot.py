@@ -28,6 +28,9 @@ parser.add_argument("--threshold",help="the bot threshold",type=float,default=0.
 parser.add_argument("--epochs",help="the bot epochs in training",type=int,default=5)
 parser.add_argument("--language",help="the bot language",type=str,default="ita")
 parser.add_argument("--expansion",help="the bot data aug expansion",type=int,default=5)
+parser.add_argument("--max_len",help="the bot text max length",type=int,default=32)
+parser.add_argument("--batch_size",help="the bot training batch_size",type=int,default=16)
+parser.add_argument("--compress",help="if you want to apply model compression",type=bool)
 bot_args = parser.parse_args()
 
 logs_file=os.path.join(bot_args.base_dir,"bot.log")
@@ -81,7 +84,7 @@ class Bot(telepot.helper.ChatHandler):
 
     def getAnswer(self,text, th=0.3):
         global predictor, answers
-        label, conf = predictor.predict(text)
+        label, conf = predictor.predict(text,bot_args.max_len)
         logging.info("for question: {} prediction {} with confidence {}".format(text, label, conf))
         if conf > th:
             response=answers[label]
@@ -98,7 +101,7 @@ def setup():
     answer = pd.read_csv(bot_args.answer)
     if not os.path.exists(model_path):
         train,dev = train_eval_dataset(dataset,lang=bot_args.language,expansion=bot_args.expansion)
-        run(train,dev,label_path=label_path,model_path=model_path,epochs=bot_args.epochs)
+        run(train,dev,label_path=label_path,model_path=model_path,epochs=bot_args.epochs,max_seq_length=bot_args.max_len,batch_size=bot_args.batch_size,compress=bot_args.compress)
 
     predictor=model_predictor(label_path=label_path,model_path=model_path)
     answers={row["question_id"]:{row["type"]:row["answer"].split("[SEP]") for _,row2 in answer.iterrows() if row2["question_id"]==row["question_id"]} for _,row in answer.iterrows()}
